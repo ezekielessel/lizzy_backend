@@ -149,8 +149,8 @@ router.get("/fetch_data", async (req, res) => {
 
 
 // route for download count 
-router.get("/download_count/:id", async (req, res) => {
-  const id = req.params.id;
+router.get("/auth/download_count/${pdfId}", async (req, res) => {
+  const pdfId = req.params.pdfId;
   const updateDownloadCountQuery = `
     UPDATE add_pdf
     SET download_count = download_count + 1
@@ -158,7 +158,7 @@ router.get("/download_count/:id", async (req, res) => {
   `;
 
   try {
-    await pool.query(updateDownloadCountQuery, [id]);
+    await pool.query(updateDownloadCountQuery, [pdfId]);
     res.status(200).send("Download count updated successfully");
   } catch (error) {
     console.error("Error updating download count:", error);
