@@ -2,13 +2,13 @@ const express = require("express");
 const pg = require("pg");
 const bcrypt = require("bcrypt");
 require("dotenv").config();
-const sharp = require("sharp");
+
 
 const router = express.Router();
 
 const pool = new pg.Pool({
- connectionString: process.env.DB_URL,
- ssl: true
+  connectionString: process.env.DB_URL,
+  ssl: true
 });
 
 // Registration
@@ -46,33 +46,28 @@ router.post("/login", async (req, res) => {
     console.log("user", user);
 
     const check = await bcrypt.compare(password, user.password_hash);
-
-    //console.log("-----password", password);
-    //console.log("-----user pass", user.password_hash);
     console.log("-----check", check);
 
     if (!check) {
       res.status(500).send({ message: "Password incorrect", payload: null });
       return;
     }
-
     delete user.password_hash;
-    // Include the username in the response payload
+
     const responsePayLoad = {
       message: "Login successful. Redirect to the next page.",
-      username: user.user_name, // Include the username here
+      username: user.user_name,
       role: user.role,
       payload: user,
     };
 
     res.status(201).send(responsePayLoad);
-
-    //res.send("Login successful. Redirect to the next page.");
   } catch (error) {
     console.error("Error during login:", error);
     res.status(500).send({ message: "An error occurred", payload: null });
   }
 });
+
 
 const multer = require("multer");
 const upload = multer({ dest: "uploads/" });
@@ -87,7 +82,7 @@ cloudinary.config({
 
 router.post("/add_data", upload.single("pdfData"), async (req, res) => {
   const { text, text_description } = req.body;
-  const pdfData = req.file; // This will contain the uploaded PDF file as binary data
+  const pdfData = req.file;
 
   console.log("text", text);
   console.log("text_description", text_description);
@@ -101,15 +96,16 @@ router.post("/add_data", upload.single("pdfData"), async (req, res) => {
 
     // Store the Cloudinary URL in the database
     const insertQuery = `
-     INSERT INTO add_pdf (text_info, text_des, pdf_file)
-      VALUES ($1, $2, $3)
+     INSERT INTO add_pdf (text_info, text_des, pdf_file, download_count)
+      VALUES ($1, $2, $3, $4)
       RETURNING id
     `;
 
     const resultDb = await pool.query(insertQuery, [
       text,
       text_description,
-      result.url, // Use the Cloudinary URL
+      download_count,
+      result.url,
     ]);
 
     if (resultDb.rowCount === 1) {
@@ -126,21 +122,21 @@ router.post("/add_data", upload.single("pdfData"), async (req, res) => {
   }
 });
 
-// Create a GET route for fetching text and a PDF file
+//  route for fetching text and a PDF file
 router.get("/fetch_data", async (req, res) => {
   try {
     // Query to retrieve text and PDF data from the database
-    const query = "SELECT id, text_info, text_des, pdf_file FROM add_pdf";
+    const query = "SELECT id, text_info, text_des, pdf_file, download_count FROM add_pdf";
 
     const result = await pool.query(query);
 
-    // Map the results to a format suitable for sending to the frontend
     const data = result.rows.map((row) => ({
       id: row.id,
       text: row.text_info,
       text_description: row.text_des,
-      pdfData: row.pdf_file, // Send the binary data directly
-      /*  pdfData: Buffer.from(JSON.stringify(row.pdf_file), "base64"), */ // Convert base64 to binary data
+      pdfData: row.pdf_file,
+      downloads: row.download_count,
+
     }));
     res.setHeader("Content-Type", "application/pdf");
 
@@ -151,7 +147,27 @@ router.get("/fetch_data", async (req, res) => {
   }
 });
 
-// Create a Delete route for Text, Text Des and PDF
+
+// route for download count 
+router.get("/download_count/:id", async (req, res) => {
+  const id = req.params.id;
+  const updateDownloadCountQuery = `
+    UPDATE add_pdf
+    SET download_count = download_count + 1
+    WHERE id = $1
+  `;
+
+  try {
+    await pool.query(updateDownloadCountQuery, [id]);
+    res.status(200).send("Download count updated successfully");
+  } catch (error) {
+    console.error("Error updating download count:", error);
+    res.status(500).json({ error: "An error occurred" });
+  }
+});
+
+
+// Delete route for Text
 router.delete("/delete_data/:id", async (req, res) => {
   const id = req.params.id;
 
@@ -186,7 +202,7 @@ router.post("/add_email", async (req, res) => {
   }
 });
 
-// Create a GET route for fetching email and message
+// route for fetching email and message
 router.get("/fetch_email", async (req, res) => {
   try {
     // Query to retrieve text and PDF data from the database
@@ -194,7 +210,6 @@ router.get("/fetch_email", async (req, res) => {
 
     const result = await pool.query(query);
 
-    // Map the results to a format suitable for sending to the frontend
     const data = result.rows.map((row) => ({
       id: row.id,
       emailAddress: row.email_address,
@@ -208,7 +223,7 @@ router.get("/fetch_email", async (req, res) => {
   }
 });
 
-// Create a Delete route to email and message
+// Create a Delete route to email and message Admin
 router.delete("/delete_email/:id", async (req, res) => {
   const id = req.params.id;
 
